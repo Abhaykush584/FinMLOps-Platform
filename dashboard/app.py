@@ -9,6 +9,9 @@ import requests
 import pandas as pd
 import streamlit as st
 
+
+# Read API_URL from Streamlit secrets, environment variable, or fallback to local Docker
+API_URL = st.secrets.get("API_URL", os.getenv("API_URL", "http://localhost:5000"))
 # ── Page Config ──────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="QuantSignal · AI Trading Monitor",
