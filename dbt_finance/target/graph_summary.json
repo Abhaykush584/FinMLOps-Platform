@@ -1,0 +1,1 @@
+{"_invocation_id": "0b34155d-210e-44be-bc1b-cf8a21c34d34", "linked": {"0": {"name": "model.dbt_finance.fct_stock_ml_features", "type": "model"}, "1": {"name": "model.dbt_finance.stg_alpha_vantage_daily", "type": "model", "succ": [0]}}}

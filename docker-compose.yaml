@@ -1,0 +1,84 @@
+# File: docker-compose.yaml
+# Three-service MLOps stack:
+#   1. airflow-standalone  — orchestration (Airflow 2.9.0)
+#   2. flask-api           — model serving  (Python 3.12-slim)
+#   3. streamlit-dashboard — UI frontend    (Python 3.12-slim)
+
+version: '3.8'
+
+# ── Shared internal network ───────────────────────────────────────────────────
+networks:
+  mlops-net:
+    driver: bridge
+
+# ── Services ─────────────────────────────────────────────────────────────────
+services:
+
+  # ── 1. Airflow Standalone (existing, untouched) ──────────────────────────
+  airflow-standalone:
+    image: apache/airflow:2.9.0
+    networks:
+      - mlops-net
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - PIP_NO_CACHE_DIR=1
+      - _PIP_ADDITIONAL_REQUIREMENTS=-r /opt/airflow/requirements.txt
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/gcp/application_default_credentials.json
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./ingestion:/opt/airflow/ingestion
+      - ./dbt_finance:/opt/airflow/dbt_finance
+      - ./ml:/opt/airflow/ml
+      - ./gcp:/opt/airflow/gcp
+      - ./requirements.txt:/opt/airflow/requirements.txt
+    ports:
+      - "8080:8080"
+    command: standalone
+
+  # ── 2. Flask Serving API ─────────────────────────────────────────────────
+  flask-api:
+    build:
+      context: .           # build context = project root (d:\financial-pipeline-ml)
+      dockerfile: api/Dockerfile
+    container_name: flask-api
+    networks:
+      - mlops-net
+    environment:
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcp/application_default_credentials.json
+    volumes:
+      # Mount live artifacts so new model.pkl is picked up without rebuild
+      - ./ml/artifacts:/app/ml/artifacts:ro
+      - ./gcp:/app/gcp:ro
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+
+  # ── 3. Streamlit Dashboard ───────────────────────────────────────────────
+  streamlit-dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    container_name: streamlit-dashboard
+    networks:
+      - mlops-net
+    depends_on:
+      flask-api:
+        condition: service_healthy
+    environment:
+      # Resolves via Docker internal DNS — flask-api hostname on mlops-net
+      - API_URL=http://flask-api:5000
+    ports:
+      - "8501:8501"
+    restart: unless-stopped

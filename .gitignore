@@ -1,0 +1,6 @@
+# Sensitive keys & environments
+gcp/*.json
+.env
+*.db
+__pycache__/
+.venv/

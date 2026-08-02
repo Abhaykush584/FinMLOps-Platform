@@ -1,0 +1,9 @@
+dbt_finance:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: oauth
+      project: symbolic-folio-491316-s8
+      dataset: raw_financial_data
+      threads: 4
